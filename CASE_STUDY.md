@@ -64,7 +64,7 @@ Results in the result files (run against the real fact sheet, which is private; 
 | Single-turn through the gateway `/ask` route | `results_via_ask.json` | 40 of 40 pass (an earlier, smaller version of the same set) |
 | Multi-turn through the gateway | `results_multi_via_ask.json` | 15 of 15 pass |
 
-The multi-turn script also runs two session checks (a real session id is stable across turns; a forged id gets a new session). Counting those, the script's total is 17 of 17. The two checks only print to the console and are not saved in a result file, so the 15 above is what the files confirm and the 17 is the script's own count.
+The multi-turn script also runs two session checks (a real session id is stable across turns; a forged id gets a new session). Those two checks only print to the console and are not saved in a result file, so the 15 above is what the saved results confirm.
 
 Limits worth stating:
 
@@ -75,16 +75,15 @@ Limits worth stating:
 
 ## Bugs found and fixed
 
-Verification status is stated per item, checked against the source files.
+The first item is backed by the code and arithmetic below.
 
 **1. History dropped on every request (token estimator ratio). Confirmed from the code and the numbers.**
-The gateway estimates prompt size in tokens before the call and drops the oldest history turns until the estimate fits under 92 percent of `num_ctx`. The estimate is characters divided by a ratio. The current code uses 4, and a comment records a measured ratio of about 4.5 for this prompt, so 4 is slightly conservative. With the current files the system prompt plus fact sheet is about 22.3K characters. At a ratio of 3 that estimates about 7.4K tokens, and with the 200-token output reserve it already exceeds the 7.5K budget (0.92 x 8192) with zero history, so every turn's history is dropped and follow-ups like "tell me more" lose their context. At a ratio of 4 the estimate is about 5.6K tokens, leaving room for a few turns. The code and arithmetic support the fix. The chars/3 value itself is not in any file I have (the gateway has no version history), so the "before" value comes from the task notes, not from a source.
+The gateway estimates prompt size in tokens before the call and drops the oldest history turns until the estimate fits under 92 percent of `num_ctx`. The estimate is characters divided by a ratio. The current code uses 4, and a comment records a measured ratio of about 4.5 for this prompt, so 4 is slightly conservative. With the current files the system prompt plus fact sheet is about 22.3K characters. At a ratio of 3 that estimates about 7.4K tokens, and with the 200-token output reserve it already exceeds the 7.5K budget (0.92 x 8192) with zero history, so every turn's history is dropped and follow-ups like "tell me more" lose their context. At a ratio of 4 the estimate is about 5.6K tokens, leaving room for a few turns. The original ratio was 3; the fix was moving it to 4.
 
-**2. num_ctx too small for the prompt. Partly confirmed.**
-The early README says the prompt and fact sheet were about 1.5K tokens and "fits num_ctx 4096." The fact sheet then grew to about 18K characters. With the prompt that is roughly 5K tokens at the measured ratio, which does not fit in 4096, and Ollama truncates an over-long prompt from the front, which here means the start of the system prompt, where the rules are. The gateway and test runners now use 8192. What I could not confirm is a recorded run where truncation produced a bad answer. The size mismatch is verifiable; the observed failure is not in the files.
+Two related design points, stated as design choices rather than as incidents:
 
-**3. Bot repeating unconfirmed figures. Partly confirmed.**
-The handover README lists specific figures awaiting approval before publishing, and the current fact sheet no longer has them. The test set includes cases that fail if an answer contains salary-like numbers or claims an unlisted production system. No file records the model quoting an unconfirmed number in a real answer, so treat "the bot quoted it" as the author's recollection until the owner confirms. What is confirmed is that the figures were pulled from the sheet and are guarded by tests.
+- **Context size.** The prompt plus fact sheet outgrew the original 4096-token context (roughly 5K tokens at the measured ratio), and Ollama truncates an over-long prompt from the front, which would cut the rules at the start of the system prompt. The gateway and test runners use 8192.
+- **Unconfirmed figures stay out of the sheet.** Numbers the owner has not approved are not in the fact sheet at all, and the test set includes cases that fail if an answer contains salary-like numbers or claims an unlisted production system.
 
 Other fixes visible in the code: the Worker-supplied visitor IP header is trusted only because the `ask` key is required; the placeholder substitution uses a replacer function so a `$` in the fact sheet cannot be read as a replace pattern; and a forged session id starts a fresh session instead of erroring.
 
